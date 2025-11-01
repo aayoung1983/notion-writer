@@ -76,23 +76,42 @@ def read_database():
 
 @app.route("/create", methods=["POST"])
 def create():
-    data = request.get_json(force=True) or {}
-    title = data.get("title")
-    content = data.get("content")
-    tags = data.get("tags") or []
-    date_str = data.get("date")
+    if not NOTION_TOKEN:
+        return jsonify({"ok": False, "error": "NOTION_TOKEN environment variable is not set"}), 500
+    if not DATABASE_ID:
+        return jsonify({"ok": False, "error": "NOTION_DATABASE_ID environment variable is not set"}), 500
 
-    # default date = today (ISO)
-    if not date_str:
-        date_str = dt.date.today().isoformat()
+    try:
+        data = request.get_json(force=True) or {}
+        title = data.get("title")
+        content = data.get("content")
+        tags = data.get("tags") or []
+        date_str = data.get("date")
 
-    payload = build_page_payload(title, content, tags, date_str)
-    resp = requests.post(f"{NOTION_BASE}/pages", headers=notion_headers(), json=payload)
+        # default date = today (ISO)
+        if not date_str:
+            date_str = dt.date.today().isoformat()
 
-    if resp.status_code >= 300:
-        return jsonify({"ok": False, "error": resp.text}), resp.status_code
+        payload = build_page_payload(title, content, tags, date_str)
+        headers = notion_headers()
+        
+        # Debug info
+        print(f"Making request to Notion API with token: {NOTION_TOKEN[:4]}...")
+        print(f"Database ID: {DATABASE_ID}")
+        print(f"Headers: {headers}")
+        print(f"Payload: {payload}")
+        
+        resp = requests.post(f"{NOTION_BASE}/pages", headers=headers, json=payload)
+        
+        if resp.status_code >= 300:
+            error_text = resp.text
+            print(f"Notion API Error: {error_text}")
+            return jsonify({"ok": False, "error": error_text, "status_code": resp.status_code}), resp.status_code
 
-    return jsonify({"ok": True, "result": resp.json()})
+        return jsonify({"ok": True, "result": resp.json()})
+    except Exception as e:
+        print(f"Error in create endpoint: {str(e)}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
     # Allow external access and enable debug mode
