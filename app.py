@@ -16,7 +16,7 @@ NOTION_VERSION = "2022-06-28"  # stable for basic ops
 
 def notion_headers():
     return {
-        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Authorization": NOTION_TOKEN,  # Try without Bearer prefix
         "Notion-Version": NOTION_VERSION,
         "Content-Type": "application/json",
     }
@@ -57,17 +57,32 @@ def health():
 
 @app.route("/read", methods=["GET"])
 def read_database():
+    if not NOTION_TOKEN:
+        return jsonify({"error": "NOTION_TOKEN not set"}), 500
+    if not DATABASE_ID:
+        return jsonify({"error": "DATABASE_ID not set"}), 500
+
+    print(f"Using token: {NOTION_TOKEN[:10]}...")  # Print first 10 chars of token
+    print(f"Database ID: {DATABASE_ID}")
+    
     # Query the database
     payload = {
         "filter": {},  # You can add filters here if needed
         "sorts": [{"timestamp": "created_time", "direction": "descending"}]
     }
     
-    resp = requests.post(
-        f"{NOTION_BASE}/databases/{DATABASE_ID}/query",
-        headers=notion_headers(),
-        json=payload
-    )
+    headers = notion_headers()
+    print(f"Request headers: {headers}")
+    print(f"Request payload: {payload}")
+    
+    try:
+        resp = requests.post(
+            f"{NOTION_BASE}/databases/{DATABASE_ID}/query",
+            headers=headers,
+            json=payload
+        )
+        print(f"Response status: {resp.status_code}")
+        print(f"Response body: {resp.text}")
 
     if resp.status_code >= 300:
         return jsonify({"ok": False, "error": resp.text}), resp.status_code
