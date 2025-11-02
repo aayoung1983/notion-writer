@@ -123,11 +123,6 @@ def read_database():
             "details": str(e)
         }), 500
 
-    if resp.status_code >= 300:
-        return jsonify({"ok": False, "error": resp.text}), resp.status_code
-
-    return jsonify({"ok": True, "results": resp.json().get("results", [])})
-
 @app.route("/create", methods=["POST"])
 def create():
     if not NOTION_TOKEN:
