@@ -15,11 +15,21 @@ NOTION_BASE = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"  # stable for basic ops
 
 def notion_headers():
-    return {
-        "Authorization": NOTION_TOKEN,  # Try without Bearer prefix
+    # Try formatting the ntn_ token differently
+    token = NOTION_TOKEN.strip()  # Remove any whitespace
+    if token.startswith('ntn_'):
+        auth_header = token
+    else:
+        auth_header = f"Bearer {token}"
+        
+    headers = {
+        "Authorization": auth_header,
         "Notion-Version": NOTION_VERSION,
         "Content-Type": "application/json",
+        "Accept": "application/json"
     }
+    print(f"Using headers: {headers}")  # Debug print
+    return headers
 
 def build_page_payload(title, content, tags=None, date_str=None):
     # Adjust property names to match your DB (Title, Tags, Date, Content)
@@ -65,24 +75,53 @@ def read_database():
     print(f"Using token: {NOTION_TOKEN[:10]}...")  # Print first 10 chars of token
     print(f"Database ID: {DATABASE_ID}")
     
-    # Query the database
-    payload = {
-        "filter": {},  # You can add filters here if needed
-        "sorts": [{"timestamp": "created_time", "direction": "descending"}]
-    }
-    
-    headers = notion_headers()
-    print(f"Request headers: {headers}")
-    print(f"Request payload: {payload}")
-    
     try:
+        # First try to access the database to verify permissions
+        headers = notion_headers()
+        verify_resp = requests.get(
+            f"{NOTION_BASE}/databases/{DATABASE_ID}",
+            headers=headers
+        )
+        print(f"Database verify response: {verify_resp.status_code}")
+        print(f"Database verify body: {verify_resp.text}")
+        
+        if verify_resp.status_code != 200:
+            return jsonify({
+                "error": "Database access failed",
+                "details": verify_resp.text,
+                "status": verify_resp.status_code
+            }), verify_resp.status_code
+        
+        # If we can access the database, try to query it
+        payload = {
+            "page_size": 10  # Start with a small number
+        }
+        
         resp = requests.post(
             f"{NOTION_BASE}/databases/{DATABASE_ID}/query",
             headers=headers,
             json=payload
         )
-        print(f"Response status: {resp.status_code}")
-        print(f"Response body: {resp.text}")
+        print(f"Query response status: {resp.status_code}")
+        print(f"Query response body: {resp.text}")
+        
+        if resp.status_code != 200:
+            return jsonify({
+                "error": "Query failed",
+                "details": resp.text
+            }), resp.status_code
+            
+        return jsonify({
+            "ok": True,
+            "results": resp.json().get("results", [])
+        })
+        
+    except Exception as e:
+        print(f"Error in read_database: {str(e)}")
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
     if resp.status_code >= 300:
         return jsonify({"ok": False, "error": resp.text}), resp.status_code
